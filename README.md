@@ -194,6 +194,8 @@ sequenceDiagram
 
 ## Design Decisions
 
+Development note: A separate development branch `dev` was used during iterative development (including a bind mount for docker, hot-reload for uvicorn, and additional debugging configuration). The `main` branch contains the clean, submission-ready version without development-only settings
+
 <details>
 <summary><strong>Service Separation</strong></summary>
 
