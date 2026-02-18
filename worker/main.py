@@ -11,7 +11,7 @@ from shared import db
 # Path to shared SQLite database (mounted volume in Docker)
 DB_PATH = os.getenv("DB_PATH", "./data/tasks.db")
 
-app = FastAPI(title="Quantum Task Worker")
+app = FastAPI(title="QuantumTask Worker")
 
 # Global thread pool used for background execution
 _executor: ThreadPoolExecutor | None = None

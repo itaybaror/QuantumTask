@@ -12,7 +12,7 @@ from shared import db
 DB_PATH = os.getenv("DB_PATH", "./data/tasks.db")
 WORKER_URL = os.getenv("WORKER_URL", "http://worker:8001")
 
-app = FastAPI(title="Quantum Task API")
+app = FastAPI(title="QuantumTask API")
 
 # Single DB connection reused by the API process
 _conn: sqlite3.Connection | None = None
