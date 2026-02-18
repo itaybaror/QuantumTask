@@ -46,3 +46,6 @@ docker-compose.override.yml
 
 # Data
 data/
+
+# Quantum examples
+quantum.py
