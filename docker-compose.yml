@@ -1,12 +1,11 @@
 services:
   api:
     build: .
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
     environment:
       DB_PATH: /app/data/tasks.db
       WORKER_URL: http://worker:8001
     volumes:
-      - ./:/app
       - ./data:/app/data
     ports:
       - "8000:8000"
@@ -15,11 +14,10 @@ services:
 
   worker:
     build: .
-    command: uvicorn worker.main:app --host 0.0.0.0 --port 8001 --reload
+    command: uvicorn worker.main:app --host 0.0.0.0 --port 8001
     environment:
       DB_PATH: /app/data/tasks.db
     volumes:
-      - ./:/app
       - ./data:/app/data
     expose:
       - "8001"
