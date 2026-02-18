@@ -10,9 +10,9 @@ def now_ts() -> int:
     return int(time.time())
 
 
-def connect(db_path: str) -> sqlite3.Connection:
+def connect(db_path: str, timeout: float = 30.0) -> sqlite3.Connection:
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=timeout)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -67,3 +67,43 @@ def get_task(conn: sqlite3.Connection, task_id: str) -> Optional[dict[str, Any]]
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
+def get_payload(conn: sqlite3.Connection, task_id: str) -> Optional[str]:
+    row = conn.execute("SELECT payload FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    return None if row is None else row["payload"]
+
+
+def set_status(conn: sqlite3.Connection, task_id: str, status: str) -> None:
+    ts = now_ts()
+    conn.execute(
+        "UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
+        (status, ts, task_id),
+    )
+    conn.commit()
+
+
+def set_result(conn: sqlite3.Connection, task_id: str, result: dict[str, Any]) -> None:
+    ts = now_ts()
+    conn.execute(
+        """
+        UPDATE tasks
+        SET status = 'completed', result_json = ?, error = NULL, updated_at = ?
+        WHERE id = ?
+        """,
+        (json.dumps(result), ts, task_id),
+    )
+    conn.commit()
+
+
+def set_error(conn: sqlite3.Connection, task_id: str, error: str) -> None:
+    ts = now_ts()
+    conn.execute(
+        """
+        UPDATE tasks
+        SET status = 'failed', error = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (error, ts, task_id),
+    )
+    conn.commit()
