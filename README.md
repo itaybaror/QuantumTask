@@ -2,47 +2,18 @@
 
 A minimal distributed quantum circuit execution service built with FastAPI, Docker, and Qiskit, demonstrating asynchronous request handling and background task execution via threading.
 
+QuantumTask is a minimal distributed service for executing OpenQASM 3 quantum circuits using Qiskit’s Aer simulator.
+
+Clients submit a circuit to the API and immediately receive a task ID. Execution happens asynchronously in a separate Worker service, and clients poll for status and results.
+
 ## Table of Contents
 
-- [About the Project](#about-the-project)
 - [Getting Started](#getting-started)
+- [Using the API](#using-the-api)
 - [Architecture](#architecture)
 - [Design Decisions](#design-decisions)
 - [Deliverables](#deliverables)
 - [Resources & References](#resources--references)
-
-## About the Project
-
-QuantumTask is a distributed quantum circuit execution system.
-
-It allows clients to:
-
-- Submit serialized OpenQASM 3 quantum circuits
-- Receive a task ID immediately
-- Poll for execution status
-- Retrieve measurement results once execution completes
-
-The system demonstrates:
-
-- Asynchronous HTTP handling
-- Background CPU-bound execution using threads
-- Clean separation between API and Worker services
-- Deterministic task lifecycle management via SQLite
-- Container-based service communication
-
-The API does not execute circuits.  
-The Worker performs execution in background threads.
-
-This guarantees:
-
-- The API remains responsive
-- Circuit execution does not block requests
-- Multiple circuits can execute concurrently
-
-⚠️ Disclaimer  
-This project uses Qiskit’s local Aer simulator only.  
-No real quantum hardware is involved.
-
 
 ## Getting Started
 
@@ -50,10 +21,11 @@ No real quantum hardware is involved.
 
 - Docker
 - Docker Compose
+- (Optional) Python environment with `pytest` and `httpx` for running tests locally
 
-### 2. Run the System
+### 2. Start the Services
 
-Build and start services:
+From the project root:
 
 ```bash
 docker compose up --build
@@ -61,22 +33,86 @@ docker compose up --build
 
 The API will be available at:
 
-```
 http://localhost:8000
-```
 
-Swagger docs:
+Swagger documentation:
 
-```
 http://localhost:8000/docs
+
+To stop the services:
+
+```bash
+docker compose down
 ```
 
-### 3. Running Tests
+### 3. Run Tests
 
-With Docker running:
+With the services running:
 
 ```bash
 pytest -q
+```
+
+Note: Tests run outside Docker and require a local Python environment with `pytest` and `httpx` installed.
+
+## Using the API
+
+### Submit a Task
+
+Send a POST request to `/tasks` with a serialized OpenQASM 3 circuit:
+
+```bash
+curl -X POST http://localhost:8000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"circuit": "OPENQASM 3.0; ..."}'
+```
+
+Response:
+
+```json
+{
+  "task_id": "uuid",
+  "status": "submitted"
+}
+```
+
+Execution begins asynchronously in the Worker service.
+
+### Retrieve Task Status
+
+```bash
+curl http://localhost:8000/tasks/<task_id>
+```
+
+Possible responses:
+
+Pending:
+
+```json
+{
+  "task_id": "...",
+  "status": "pending"
+}
+```
+
+Completed:
+
+```json
+{
+  "task_id": "...",
+  "status": "completed",
+  "result": { ... }
+}
+```
+
+Failed:
+
+```json
+{
+  "task_id": "...",
+  "status": "failed",
+  "error": "..."
+}
 ```
 
 ## Architecture
@@ -128,6 +164,33 @@ Project structure:
 - Async is used only for HTTP I/O
 - ThreadPoolExecutor handles blocking CPU execution
 - SQLite acts as coordination layer
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant A as API (FastAPI async)
+  participant W as Worker (FastAPI async)
+  participant T as ThreadPool (threads)
+  participant DB as SQLite
+
+  C->>A: POST /tasks (circuit)
+  A->>DB: INSERT task (status=submitted)
+  A->>W: POST /execute (task_id)
+  W-->>A: {accepted:true}
+  A-->>C: {task_id, status=submitted}
+
+  W->>T: submit(_run_task)
+  T->>DB: UPDATE status=pending
+  T->>DB: UPDATE status=completed + result_json
+
+  C->>A: GET /tasks/{id}
+  A->>DB: SELECT status/result
+  A-->>C: status=pending
+
+  C->>A: GET /tasks/{id}
+  A->>DB: SELECT status/result
+  A-->>C: status=completed + result
+```
 
 ## Design Decisions
 
