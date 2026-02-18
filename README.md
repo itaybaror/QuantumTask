@@ -17,7 +17,7 @@ sequenceDiagram
   A-->>C: {task_id, status=submitted}
 
   W->>T: submit(_run_task)
-  T->>DB: UPDATE status=running
+  T->>DB: UPDATE status=pending
   T->>DB: UPDATE status=completed + result_json
 
   C->>A: GET /tasks/{id}
