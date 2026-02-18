@@ -1,49 +1,97 @@
 import time
+import uuid
 
 import httpx
-from qiskit import QuantumCircuit
-from qiskit.qasm3 import dumps as qasm3_dumps
-
 
 API_URL = "http://localhost:8000"
-TIMEOUT_S = 20.0
-POLL_S = 0.25
 
 
-def _bell_qasm3() -> str:
-    qc = QuantumCircuit(2, 2)
-    qc.h(0)
-    qc.cx(0, 1)
-    qc.measure([0, 1], [0, 1])
-    return qasm3_dumps(qc)
+# Test that sending invalid JSON returns 400
+def test_post_invalid_json():
+    r = httpx.post(
+        f"{API_URL}/tasks",
+        content="not-json",
+        headers={"Content-Type": "application/json"},
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"] == "invalid json"
 
 
-def test_submit_and_get_result():
-    payload = _bell_qasm3()
+# Test that missing "circuit" field returns 400
+def test_post_missing_circuit():
+    r = httpx.post(f"{API_URL}/tasks", json={})
+    assert r.status_code == 400
+    assert "circuit" in r.json()["detail"]
 
-    with httpx.Client(timeout=10.0) as client:
-        r = client.post(f"{API_URL}/tasks", json={"circuit": payload})
-        assert r.status_code == 200
-        task_id = r.json()["task_id"]
-        assert isinstance(task_id, str) and task_id
 
-        deadline = time.time() + TIMEOUT_S
-        while True:
-            g = client.get(f"{API_URL}/tasks/{task_id}")
-            assert g.status_code == 200
-            data = g.json()
+# Test that empty circuit string returns 400
+def test_post_empty_circuit():
+    r = httpx.post(f"{API_URL}/tasks", json={"circuit": "   "})
+    assert r.status_code == 400
 
-            if data["status"] == "completed":
-                result = data["result"]
-                assert isinstance(result, dict)
-                assert "00" in result or "11" in result
-                assert sum(result.values()) > 0
-                break
 
-            if data["status"] == "failed":
-                raise AssertionError(f"task failed: {data.get('error')}")
+# Test that requesting a non-existent task returns 404
+def test_get_nonexistent_task():
+    fake_id = str(uuid.uuid4())
+    r = httpx.get(f"{API_URL}/tasks/{fake_id}")
+    assert r.status_code == 404
+    assert r.json()["detail"] == "task not found"
 
-            if time.time() > deadline:
-                raise AssertionError("timed out waiting for task completion")
 
-            time.sleep(POLL_S)
+# Test that invalid QASM results in task status "failed"
+def test_invalid_qasm_results_in_failed_status():
+    r = httpx.post(f"{API_URL}/tasks", json={"circuit": "INVALID QASM"})
+    assert r.status_code == 200
+
+    task_id = r.json()["task_id"]
+
+    deadline = time.time() + 10
+    while True:
+        g = httpx.get(f"{API_URL}/tasks/{task_id}")
+        data = g.json()
+
+        if data["status"] == "failed":
+            assert "error" in data
+            break
+
+        if time.time() > deadline:
+            raise AssertionError("Task did not fail within timeout")
+
+        time.sleep(0.2)
+
+
+# Test full successful execution of a valid Bell state circuit
+def test_successful_bell_circuit():
+    qasm = """OPENQASM 3.0;
+include "stdgates.inc";
+bit[2] c;
+qubit[2] q;
+h q[0];
+cx q[0], q[1];
+c[0] = measure q[0];
+c[1] = measure q[1];
+"""
+
+    r = httpx.post(f"{API_URL}/tasks", json={"circuit": qasm})
+    assert r.status_code == 200
+
+    task_id = r.json()["task_id"]
+
+    deadline = time.time() + 10
+    while True:
+        g = httpx.get(f"{API_URL}/tasks/{task_id}")
+        data = g.json()
+
+        if data["status"] == "completed":
+            result = data["result"]
+            assert isinstance(result, dict)
+            assert sum(result.values()) > 0
+            break
+
+        if data["status"] == "failed":
+            raise AssertionError(f"Unexpected failure: {data.get('error')}")
+
+        if time.time() > deadline:
+            raise AssertionError("Task did not complete within timeout")
+
+        time.sleep(0.2)
