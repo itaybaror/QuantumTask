@@ -4,3 +4,4 @@ httpx
 pytest
 qiskit==1.4.3
 qiskit_aer==0.17.2
+qiskit-qasm3-import
